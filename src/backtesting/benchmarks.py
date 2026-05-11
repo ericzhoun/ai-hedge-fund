@@ -6,13 +6,13 @@ from src.tools.api import get_price_data
 
 
 class BenchmarkCalculator:
-    def get_return_pct(self, ticker: str, start_date: str, end_date: str) -> float | None:
+    def get_return_pct(self, ticker: str, start_date: str, end_date: str, interval: str = "day", interval_multiplier: int = 1) -> float | None:
         """Compute simple buy-and-hold return % for ticker from start_date to end_date.
 
         Return is (last_close / first_close - 1) * 100, or None if unavailable.
         """
         try:
-            df = get_price_data(ticker, start_date, end_date)
+            df = get_price_data(ticker, start_date, end_date, interval=interval, interval_multiplier=interval_multiplier, include_snapshot=False)
             if df.empty:
                 return None
             first_close = df.iloc[0]["close"]

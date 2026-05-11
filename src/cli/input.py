@@ -219,6 +219,8 @@ class CLIInputs:
     end_date: str
     initial_cash: float
     margin_requirement: float
+    interval: str = "day"
+    interval_multiplier: int = 1
     show_reasoning: bool = False
     show_agent_graph: bool = False
     raw_args: Optional[argparse.Namespace] = None
@@ -254,6 +256,19 @@ def parse_cli_inputs(
         default=0.0,
         help="Initial margin requirement ratio for shorts (e.g., 0.5 for 50%%). Defaults to 0.0",
     )
+    parser.add_argument(
+        "--interval",
+        type=str,
+        default="day",
+        choices=["minute", "hour", "day", "week", "month"],
+        help="Price data interval (default: day)",
+    )
+    parser.add_argument(
+        "--interval-multiplier",
+        type=int,
+        default=1,
+        help="Price data interval multiplier (default: 1)",
+    )
 
     if include_reasoning_flag:
         parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
@@ -280,6 +295,8 @@ def parse_cli_inputs(
         end_date=end_date,
         initial_cash=getattr(args, "initial_cash", 100000.0),
         margin_requirement=getattr(args, "margin_requirement", 0.0),
+        interval=getattr(args, "interval", "day"),
+        interval_multiplier=getattr(args, "interval_multiplier", 1),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
         raw_args=args,

@@ -51,13 +51,15 @@ def day_swing_trader_agent(state: AgentState, agent_id: str = "day_swing_trader_
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    interval = data.get("interval", "day")
+    interval_multiplier = data.get("interval_multiplier", 1)
 
     results: dict[str, dict] = {}
     analysis_by_ticker: dict[str, dict] = {}
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching price data")
-        prices = get_prices(ticker=ticker, start_date=start_date, end_date=end_date, api_key=api_key)
+        prices = get_prices(ticker=ticker, start_date=start_date, end_date=end_date, interval=interval, interval_multiplier=interval_multiplier, api_key=api_key)
         if not prices:
             progress.update_status(agent_id, ticker, "Failed: no price data")
             continue
@@ -108,7 +110,8 @@ def build_features(df: pd.DataFrame) -> dict:
     htf_trend = detect_htf_trend(htf)
     itf_range = detect_itf_range(itf)
     manipulation = detect_manipulation_wick(itf, itf_range)
-    zone = compute_discount_premium_zone(itf_range, float(itf["close"].iloc[-1]))
+    current_price = float(itf["close"].iloc[-1])
+    zone = compute_discount_premium_zone(itf_range, current_price)
     bullish_ob = detect_order_block(itf, side="bullish")
     bearish_ob = detect_order_block(itf, side="bearish")
     bullish_fvg = detect_fair_value_gap(itf, side="bullish")
@@ -118,11 +121,21 @@ def build_features(df: pd.DataFrame) -> dict:
     invalidation_bull = check_invalidation(itf, itf_range, side="bullish")
     invalidation_bear = check_invalidation(itf, itf_range, side="bearish")
 
+    # Evaluate setup readiness (pre-position vs confirmed entry)
+    setup_readiness = evaluate_setup_readiness(
+        zone=zone,
+        bullish_confirm=bullish_confirm,
+        bearish_confirm=bearish_confirm,
+        itf_range=itf_range,
+        current_price=current_price,
+    )
+
     return {
         "htf_trend": htf_trend,
         "itf_range": itf_range,
-        "current_price": round(float(itf["close"].iloc[-1]), 4),
+        "current_price": round(current_price, 4),
         "zone": zone,
+        "setup_readiness": setup_readiness,
         "manipulation": manipulation,
         "order_blocks": {"bullish": bullish_ob, "bearish": bearish_ob},
         "fair_value_gaps": {"bullish": bullish_fvg, "bearish": bearish_fvg},
@@ -268,16 +281,41 @@ def detect_fair_value_gap(itf: pd.DataFrame, side: str, lookback: int = 30) -> d
 
 
 def compute_discount_premium_zone(range_bounds: dict, current_price: float) -> dict:
-    """Locate price within the range and compute the 61.8%-80% Fib sub-zones."""
+    """Locate price within the range and compute continuous depth scores.
+
+    Instead of binary in/out flags, returns ``discount_depth_pct`` and
+    ``premium_depth_pct`` — continuous 0–100 scores measuring how deep
+    into the respective Fibonacci 61.8%–80% zone the price currently is.
+
+    * 0 %  = price is exactly at the zone edge (61.8% retracement level)
+    * 100% = price is at the deepest point (80% retracement level)
+    * Negative values mean the price has not yet reached the zone
+      (distance expressed as a percentage of zone width).
+    * Values > 100 mean the price has overshot past the 80% level.
+    """
     low = range_bounds["low"]
     high = range_bounds["high"]
     span = max(high - low, 1e-9)
     position = (current_price - low) / span  # 0 = at low, 1 = at high
 
-    discount_618 = low + span * (1 - 0.618)
-    discount_80 = low + span * (1 - 0.80)
-    premium_618 = low + span * 0.618
-    premium_80 = low + span * 0.80
+    # Zone boundaries
+    discount_618 = low + span * (1 - 0.618)   # upper edge of discount zone
+    discount_80  = low + span * (1 - 0.80)    # deepest point of discount zone
+    premium_618  = low + span * 0.618          # lower edge of premium zone
+    premium_80   = low + span * 0.80           # deepest point of premium zone
+
+    # Zone widths
+    discount_zone_width = max(discount_618 - discount_80, 1e-9)
+    premium_zone_width  = max(premium_80 - premium_618, 1e-9)
+
+    # Continuous depth scores
+    # Discount: 0% at discount_618 (edge), 100% at discount_80 (deepest)
+    # Price moving DOWN into discount → depth increases
+    discount_depth_pct = ((discount_618 - current_price) / discount_zone_width) * 100.0
+
+    # Premium: 0% at premium_618 (edge), 100% at premium_80 (deepest)
+    # Price moving UP into premium → depth increases
+    premium_depth_pct = ((current_price - premium_618) / premium_zone_width) * 100.0
 
     if position < 0.5:
         label = "discount"
@@ -286,16 +324,13 @@ def compute_discount_premium_zone(range_bounds: dict, current_price: float) -> d
     else:
         label = "equilibrium"
 
-    in_discount_zone = bool(discount_80 <= current_price <= discount_618)
-    in_premium_zone = bool(premium_618 <= current_price <= premium_80)
-
     return {
         "label": label,
         "position_in_range": round(float(position), 4),
         "discount_zone_61_80": [round(discount_80, 4), round(discount_618, 4)],
         "premium_zone_61_80": [round(premium_618, 4), round(premium_80, 4)],
-        "in_discount_zone": in_discount_zone,
-        "in_premium_zone": in_premium_zone,
+        "discount_depth_pct": round(float(discount_depth_pct), 2),
+        "premium_depth_pct": round(float(premium_depth_pct), 2),
     }
 
 
@@ -339,6 +374,76 @@ def check_invalidation(itf: pd.DataFrame, range_bounds: dict, side: str) -> dict
     return {"invalidated": invalidated, "last_close": round(last_close, 4)}
 
 
+def evaluate_setup_readiness(
+    zone: dict,
+    bullish_confirm: dict,
+    bearish_confirm: dict,
+    itf_range: dict,
+    current_price: float,
+) -> dict:
+    """Classify the current state into setup stages.
+
+    Separates *setup validity* (structural conditions that allow positioning)
+    from *execution trigger* (LTF confirmation required only for scaling).
+
+    Returns a dict per side (bullish / bearish) with:
+        stage: "no_setup" | "pre_position" | "confirmed_entry"
+        description: human-readable explanation
+    
+    Stage definitions:
+        no_setup        — price is far from any actionable Fib zone.
+        pre_position    — price is near or inside the zone (approaching or
+                          shallow depth). Valid for initial/partial entry
+                          without LTF confirmation.
+        confirmed_entry — price is inside the zone AND LTF confirmation is
+                          present. Valid for full position / scaling.
+    """
+    discount_depth = zone.get("discount_depth_pct", -999)
+    premium_depth  = zone.get("premium_depth_pct", -999)
+
+    # Proximity threshold: within ~5% of range width of the zone edge
+    # corresponds to depth_pct roughly between -27% and 0%
+    APPROACH_THRESHOLD = -27.0  # price is close but hasn't entered the zone yet
+
+    # --- Bullish side (discount zone) ---
+    if discount_depth >= 0:
+        # Price is inside the discount zone
+        if bullish_confirm.get("confirmed", False):
+            bull_stage = "confirmed_entry"
+            bull_desc = f"In discount zone ({discount_depth:.0f}% depth) with LTF bullish confirmation — full entry valid."
+        else:
+            bull_stage = "pre_position"
+            bull_desc = f"In discount zone ({discount_depth:.0f}% depth) but no LTF confirmation yet — pre-position only."
+    elif discount_depth >= APPROACH_THRESHOLD:
+        # Price is approaching the discount zone
+        bull_stage = "pre_position"
+        bull_desc = f"Approaching discount zone ({discount_depth:.0f}% from edge) — early pre-position valid."
+    else:
+        bull_stage = "no_setup"
+        bull_desc = "Price is far from the discount zone."
+
+    # --- Bearish side (premium zone) ---
+    if premium_depth >= 0:
+        # Price is inside the premium zone
+        if bearish_confirm.get("confirmed", False):
+            bear_stage = "confirmed_entry"
+            bear_desc = f"In premium zone ({premium_depth:.0f}% depth) with LTF bearish confirmation — full entry valid."
+        else:
+            bear_stage = "pre_position"
+            bear_desc = f"In premium zone ({premium_depth:.0f}% depth) but no LTF confirmation yet — pre-position only."
+    elif premium_depth >= APPROACH_THRESHOLD:
+        bear_stage = "pre_position"
+        bear_desc = f"Approaching premium zone ({premium_depth:.0f}% from edge) — early pre-position valid."
+    else:
+        bear_stage = "no_setup"
+        bear_desc = "Price is far from the premium zone."
+
+    return {
+        "bullish": {"stage": bull_stage, "description": bull_desc},
+        "bearish": {"stage": bear_stage, "description": bear_desc},
+    }
+
+
 # ---------------------------------------------------------------------------
 # LLM judgment
 # ---------------------------------------------------------------------------
@@ -368,11 +473,32 @@ def generate_day_swing_output(
 
                 Invalidation: if an ITF candle closes opposite to the scenario's range bound, the setup is invalidated.
 
+                ZONE DEPTH SCORING (new — replaces binary in-zone / not-in-zone):
+                The zone fields `discount_depth_pct` and `premium_depth_pct` are continuous 0–100 scores:
+                  - Negative  = price has NOT reached the zone yet (magnitude = distance as % of zone width)
+                  - 0%        = price is exactly at the zone edge (61.8% Fib level)
+                  - 50%       = price is halfway through the zone
+                  - 100%      = price is at the deepest point (80% Fib level)
+                  - >100%     = price has overshot past the 80% level
+                Use this depth score to scale confidence: deeper = higher-quality entry, shallower = lower confidence.
+
+                SETUP READINESS (new — separates structure from trigger):
+                The `setup_readiness` field classifies each side (bullish/bearish) into stages:
+                  - "no_setup"        — price is far from any actionable zone. Signal should be neutral.
+                  - "pre_position"    — price is near or inside the zone but lacks LTF confirmation.
+                                        A directional signal IS allowed, but confidence should be capped
+                                        at ~40-60 (partial/initial position only, no scaling).
+                  - "confirmed_entry" — price is in the zone AND LTF confirmation is present.
+                                        Full confidence is warranted based on other confluences.
+
                 Rules for grading the signal:
                 - Require HTF trend alignment with the direction. If HTF is neutral, default toward neutral unless the manipulation + order block + LTF confirmation are all present.
-                - Confidence should scale with the number of confluences met (trend, zone, manipulation, order block, FVG, LTF confirmation) and be lowered heavily if invalidation is triggered.
-                - Prefer "neutral" when no valid Model-1 or Model-2 pattern is present.
-                - Output JSON with: signal (bullish|bearish|neutral), confidence (0-100 float), reasoning (string citing which Model applied, which confluences fired, and the key levels).
+                - Confidence should scale with: (a) zone depth score, (b) setup readiness stage, (c) number of confluences met (trend, manipulation, order block, FVG, LTF confirmation).
+                - Heavily penalize confidence if invalidation is triggered.
+                - For pre_position stage: signal direction is allowed but cap confidence at 40-60.
+                - For confirmed_entry stage: full confidence range 60-100 based on confluences and depth.
+                - Prefer "neutral" when both sides show "no_setup".
+                - Output JSON with: signal (bullish|bearish|neutral), confidence (0-100 float), reasoning (string citing which Model applied, the setup stage, zone depth, confluences, and key levels).
                 """,
             ),
             (

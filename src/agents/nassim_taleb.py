@@ -35,6 +35,8 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    interval = data.get("interval", "day")
+    interval_multiplier = data.get("interval_multiplier", 1)
 
     # Look one year back for insider trades and news
     start_date = (datetime.fromisoformat(end_date) - timedelta(days=365)).date().isoformat()
@@ -44,7 +46,7 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
 
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching price data")
-        prices = get_prices(ticker, start_date, end_date, api_key=api_key)
+        prices = get_prices(ticker, start_date, end_date, interval=interval, interval_multiplier=interval_multiplier, api_key=api_key)
         prices_df = prices_to_df(prices) if prices else pd.DataFrame()
 
         progress.update_status(agent_id, ticker, "Fetching financial metrics")

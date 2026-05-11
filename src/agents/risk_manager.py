@@ -14,6 +14,8 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
     data = state["data"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    interval = data.get("interval", "day")
+    interval_multiplier = data.get("interval_multiplier", 1)
     
     # Initialize risk analysis for each ticker
     risk_analysis = {}
@@ -31,6 +33,8 @@ def risk_management_agent(state: AgentState, agent_id: str = "risk_management_ag
             ticker=ticker,
             start_date=data["start_date"],
             end_date=data["end_date"],
+            interval=interval,
+            interval_multiplier=interval_multiplier,
             api_key=api_key,
         )
 
