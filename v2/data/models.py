@@ -214,7 +214,7 @@ class EarningsData(BaseModel):
 
 
 class Earnings(BaseModel):
-    """Earnings data from /earnings."""
+    """Earnings data from /earnings (single-ticker, latest-period mode)."""
 
     model_config = _IGNORE
 
@@ -222,6 +222,30 @@ class Earnings(BaseModel):
     report_period: str
     fiscal_period: str | None = None
     currency: str | None = None
+    quarterly: EarningsData | None = None
+    annual: EarningsData | None = None
+
+
+class EarningsRecord(BaseModel):
+    """One filing from /earnings/?ticker=X&limit=N (flat history mode).
+
+    Each record is a single SEC filing about a fiscal period.
+    The same report_period can appear multiple times with different
+    source_type values (e.g. 8-K and 10-Q for the same quarter).
+    """
+
+    model_config = _IGNORE
+
+    ticker: str
+    report_period: str
+    source_type: str
+    filing_date: str
+    filing_datetime: str | None = None
+    filing_window: str | None = None
+    fiscal_period: str | None = None
+    currency: str | None = None
+    filing_url: str | None = None
+    accession_number: str | None = None
     quarterly: EarningsData | None = None
     annual: EarningsData | None = None
 
@@ -244,18 +268,3 @@ class Filing(BaseModel):
     document_count: int | None = None
     is_xbrl: bool | None = None
     url: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Analyst Estimates
-# ---------------------------------------------------------------------------
-
-class AnalystEstimate(BaseModel):
-    """Single analyst estimate from /analyst-estimates."""
-
-    model_config = _IGNORE
-
-    fiscal_period: str | None = None
-    period: str | None = None
-    revenue: int | None = None
-    earnings_per_share: float | None = None
