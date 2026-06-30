@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hedge Fund Terminal</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(20, 26, 40, 0.7);
+            --border-color: rgba(60, 75, 100, 0.4);
+            --accent-glow: 0 0 20px rgba(59, 130, 246, 0.4);
+            --primary: #3b82f6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --bullish: #10b981;
+            --bearish: #ef4444;
+            --neutral: #f59e0b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.1), transparent 25%);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Glassmorphism Panel Base */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 350px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border-right: 1px solid var(--border-color);
+            background: rgba(15, 20, 30, 0.85);
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary);
+            box-shadow: var(--accent-glow);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            box-shadow: var(--accent-glow);
+            transform: translateY(-1px);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 24px;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .decisions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .decision-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid var(--border-color);
+        }
+
+        .signal-bullish { border-left-color: var(--bullish); }
+        .signal-bearish { border-left-color: var(--bearish); }
+        .signal-neutral { border-left-color: var(--neutral); }
+        
+        .signal-text-bullish { color: var(--bullish); }
+        .signal-text-bearish { color: var(--bearish); }
+        .signal-text-neutral { color: var(--neutral); }
+
+        /* Chat Interface */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 400px;
+            margin-top: auto;
+        }
+
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px 8px 0 0;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg-ai {
+            align-self: flex-start;
+            background: rgba(40, 50, 70, 0.8);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 2px;
+        }
+
+        .chat-input-area {
+            display: flex;
+            padding: 12px;
+            background: rgba(20, 26, 40, 0.9);
+            border-radius: 0 0 8px 8px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 15px;
+            padding: 8px;
+            outline: none;
+        }
+
+        .chat-send {
+            background: transparent;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 8px;
+            font-weight: 600;
+        }
+
+        /* Loading overlay */
+        .loader-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 50;
+            border-radius: 12px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .multi-select-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+        }
+        .multi-select-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        /* Markdown styling for chat */
+        .msg-ai pre {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .msg-ai code {
+            font-family: monospace;
+            color: #9cdcfe;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="logo">AI Hedge Fund</div>
+        
+        <form id="runForm">
+            <div class="form-group">
+                <label>Tickers (comma separated)</label>
+                <input type="text" id="tickers" value="AAPL,MSFT" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Start Date</label>
+                <input type="date" id="start_date" value="2025-01-01" required>
+            </div>
+            
+            <div class="form-group">
+                <label>End Date</label>
+                <input type="date" id="end_date" value="2026-04-29" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Initial Cash</label>
+                <input type="number" id="initial_cash" value="100000" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Model</label>
+                <select id="model_name">
+                    <option value="gpt-4.1">GPT-4.1</option>
+                    <option value="gpt-5.4">GPT-5.4</option>
+                    <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                    <option value="claude-opus-4-7" selected>Claude Opus 4.7</option>
+                    <option value="deepseek-reasoner">DeepSeek R1</option>
+                    <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Provider</label>
+                <select id="model_provider">
+                    <option value="Anthropic" selected>Anthropic</option>
+                    <option value="OpenAI">OpenAI</option>
+                    <option value="Google">Google</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Analysts</label>
+                <div class="multi-select-container">
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="warren_buffett" checked> Warren Buffett</label>
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="ben_graham" checked> Ben Graham</label>
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="bill_ackman" checked> Bill Ackman</label>
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="nassim_taleb" checked> Nassim Taleb</label>
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="tv_st_ep03" checked> TV-ST-EP03 (Smart Trader)</label>
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="day_swing_trader" checked> Day/Swing Trader</label>
+                    <label class="multi-select-item"><input type="checkbox" name="analysts" value="howard_marks" checked> Howard Marks</label>
+                </div>
+            </div>
+
+            <button type="submit" class="btn">Run Analysis</button>
+        </form>
+    </div>
+
+    <div class="main-content">
+        <div class="loader-overlay" id="loader">
+            <div class="spinner"></div>
+            <h3 style="color: white; letter-spacing: 1px;">Running Hedge Fund Simulation...</h3>
+            <p style="color: var(--text-muted); margin-top: 8px;">Agents are analyzing data, please wait.</p>
+        </div>
+
+        <div class="results-container glass-panel card" id="resultsArea" style="display: none;">
+            <div class="card-title">Portfolio Manager Decisions</div>
+            <div class="decisions-grid" id="decisionsGrid">
+                <!-- Decisions will be injected here -->
+            </div>
+        </div>
+
+        <div class="results-container glass-panel card" id="analystArea" style="display: none; margin-top: 24px;">
+            <div class="card-title">Detailed Analyst Signals</div>
+            <div class="analysts-grid" id="analystsGrid" style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- Analyst signals will be injected here -->
+            </div>
+        </div>
+
+        <div class="chat-container glass-panel" style="opacity: 0.5; pointer-events: none;" id="chatSection">
+            <div class="chat-history" id="chatHistory">
+                <div class="message msg-ai">
+                    Hello! I am the AI Hedge Fund Manager. Once you run an analysis, I'll be able to answer follow-up questions about the signals and trading decisions.
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Ask a follow up question (e.g. Why did we short MSFT?)" autocomplete="off">
+                <button class="chat-send" id="chatSend">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        let currentSessionId = null;
+
+        function loadDefaults() {
+            const saved = localStorage.getItem('hf_defaults');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    if (data.tickers) document.getElementById('tickers').value = data.tickers.join(',');
+                    if (data.start_date) document.getElementById('start_date').value = data.start_date;
+                    if (data.end_date) document.getElementById('end_date').value = data.end_date;
+                    if (data.initial_cash) document.getElementById('initial_cash').value = data.initial_cash;
+                    if (data.model_name) document.getElementById('model_name').value = data.model_name;
+                    if (data.model_provider) document.getElementById('model_provider').value = data.model_provider;
+                    
+                    if (data.selected_analysts) {
+                        const checkboxes = document.querySelectorAll('input[name="analysts"]');
+                        checkboxes.forEach(cb => {
+                            cb.checked = data.selected_analysts.includes(cb.value);
+                        });
+                    }
+                } catch(e) { console.error("Error loading defaults:", e); }
+            } else {
+                // Auto-fill dates if no saved data
+                const today = new Date();
+                const threeMonthsAgo = new Date();
+                threeMonthsAgo.setMonth(today.getMonth() - 3);
+                
+                document.getElementById('end_date').value = today.toISOString().split('T')[0];
+                document.getElementById('start_date').value = threeMonthsAgo.toISOString().split('T')[0];
+            }
+        }
+
+        // Initialize form
+        loadDefaults();
+
+        document.getElementById('runForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const tickers = document.getElementById('tickers').value.split(',').map(t => t.trim());
+            const start_date = document.getElementById('start_date').value;
+            const end_date = document.getElementById('end_date').value;
+            const initial_cash = parseFloat(document.getElementById('initial_cash').value);
+            const model_name = document.getElementById('model_name').value;
+            const model_provider = document.getElementById('model_provider').value;
+            
+            const analystCheckboxes = document.querySelectorAll('input[name="analysts"]:checked');
+            const selected_analysts = Array.from(analystCheckboxes).map(cb => cb.value);
+
+            // Save for next session
+            localStorage.setItem('hf_defaults', JSON.stringify({
+                tickers, start_date, end_date, initial_cash, model_name, model_provider, selected_analysts
+            }));
+
+            const loader = document.getElementById('loader');
+            loader.style.display = 'flex';
+
+            try {
+                const res = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tickers, start_date, end_date, initial_cash, model_name, model_provider, selected_analysts
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    currentSessionId = data.session_id;
+                    renderResults(data.result.decisions);
+                    renderAnalystSignals(data.result.analyst_signals);
+                    
+                    // Enable chat
+                    const chatSection = document.getElementById('chatSection');
+                    chatSection.style.opacity = '1';
+                    chatSection.style.pointerEvents = 'all';
+                    
+                    addChatMessage('ai', 'Analysis complete. The agents have made their decisions and the context has been saved. What would you like to know?');
+                } else {
+                    alert('Error: ' + data.detail);
+                }
+            } catch (err) {
+                alert('Connection error: ' + err.message);
+            } finally {
+                loader.style.display = 'none';
+            }
+        });
+
+        function renderAnalystSignals(signals) {
+            const analystArea = document.getElementById('analystArea');
+            const grid = document.getElementById('analystsGrid');
+            
+            analystArea.style.display = 'flex';
+            grid.innerHTML = '';
+
+            // Reorganize by ticker
+            const byTicker = {};
+            for (const [agent, tickersObj] of Object.entries(signals)) {
+                if (typeof tickersObj !== 'object' || tickersObj === null) continue;
+                for (const [ticker, signalObj] of Object.entries(tickersObj)) {
+                    if (!byTicker[ticker]) byTicker[ticker] = [];
+                    byTicker[ticker].push({ agent, ...signalObj });
+                }
+            }
+
+            for (const [ticker, agentList] of Object.entries(byTicker)) {
+                const div = document.createElement('div');
+                div.className = `decision-item`;
+                div.style.gridColumn = "1 / -1";
+                div.style.background = "rgba(0, 0, 0, 0.15)";
+                div.style.borderLeft = "none";
+                
+                let html = `<h3 style="margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; color: var(--primary);">${ticker} detailed analysis</h3>`;
+                html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">`;
+                
+                agentList.forEach(item => {
+                    let signalClass = 'signal-text-neutral';
+                    let borderColor = 'var(--neutral)';
+                    let s_low = (item.signal || '').toLowerCase();
+                    if (s_low === 'bullish') { signalClass = 'signal-text-bullish'; borderColor = 'var(--bullish)'; }
+                    if (s_low === 'bearish') { signalClass = 'signal-text-bearish'; borderColor = 'var(--bearish)'; }
+                    
+                    const agentName = item.agent.replace('_agent', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+                    html += `
+                        <div style="background: rgba(20, 26, 40, 0.6); padding: 16px; border-radius: 8px; border-top: 3px solid ${borderColor}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="font-weight: 600; font-size: 14px;">${agentName}</span>
+                                <span class="${signalClass}" style="text-transform: uppercase; font-size: 12px; font-weight: 800; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px;">${item.signal} (${item.confidence || 0}%)</span>
+                            </div>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">${item.reasoning || 'No reasoning provided.'}</p>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+                div.innerHTML = html;
+                grid.appendChild(div);
+            }
+        }
+
+        function renderResults(decisions) {
+            const resultsArea = document.getElementById('resultsArea');
+            const grid = document.getElementById('decisionsGrid');
+            
+            resultsArea.style.display = 'flex';
+            grid.innerHTML = '';
+
+            for (const ticker in decisions) {
+                const dec = decisions[ticker];
+                let signalClass = 'signal-neutral';
+                let textClass = 'signal-text-neutral';
+                if (dec.action === 'buy') { signalClass = 'signal-bullish'; textClass = 'signal-text-bullish'; }
+                if (dec.action === 'sell' || dec.action === 'short') { signalClass = 'signal-bearish'; textClass = 'signal-text-bearish'; }
+
+                const div = document.createElement('div');
+                div.className = `decision-item ${signalClass}`;
+                div.innerHTML = `
+                    <h3 style="margin-bottom: 8px;">${ticker} <span class="${textClass}" style="float:right; text-transform:uppercase;">${dec.action}</span></h3>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Quantity: ${dec.quantity}</p>
+                    <p style="font-size: 14px; line-height: 1.4;">${dec.reasoning}</p>
+                `;
+                grid.appendChild(div);
+            }
+        }
+
+        const chatInput = document.getElementById('chatInput');
+        const chatSend = document.getElementById('chatSend');
+        const chatHistory = document.getElementById('chatHistory');
+
+        async function sendMessage() {
+            const msg = chatInput.value.trim();
+            if (!msg || !currentSessionId) return;
+
+            addChatMessage('user', msg);
+            chatInput.value = '';
+
+            // Add loading placeholder
+            const loaderId = 'loader-' + Date.now();
+            addChatMessage('ai', '...', loaderId);
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: currentSessionId, message: msg })
+                });
+
+                const data = await res.json();
+                
+                // Remove loader
+                document.getElementById(loaderId).remove();
+                
+                if (res.ok) {
+                    addChatMessage('ai', data.reply);
+                } else {
+                    addChatMessage('ai', 'Error: ' + data.detail);
+                }
+            } catch (err) {
+                document.getElementById(loaderId).remove();
+                addChatMessage('ai', 'Connection error.');
+            }
+        }
+
+        chatSend.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function addChatMessage(role, text, id=null) {
+            const div = document.createElement('div');
+            div.className = `message ${role === 'user' ? 'msg-user' : 'msg-ai'}`;
+            if (id) div.id = id;
+            
+            // Use marked.js for AI responses to render markdown
+            div.innerHTML = role === 'ai' ? marked.parse(text) : text;
+            
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+    </script>
+</body>
+</html>

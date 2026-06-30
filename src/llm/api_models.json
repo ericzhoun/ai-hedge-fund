@@ -30,6 +30,21 @@
     "provider": "Kimi"
   },
   {
+    "display_name": "Claude Sonnet 4.6",
+    "model_name": "claude-sonnet-4-6",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Claude Haiku 4.5",
+    "model_name": "claude-haiku-4-5",
+    "provider": "Anthropic"
+  },
+  {
+    "display_name": "Claude Opus 4.7",
+    "model_name": "claude-opus-4-7",
+    "provider": "Anthropic"
+  },
+  {
     "display_name": "Gemini 3.1 Pro",
     "model_name": "gemini-3.1-pro-preview",
     "provider": "Google"

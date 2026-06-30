@@ -52,6 +52,8 @@ def run_hedge_fund(
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
+    interval: str = "day",
+    interval_multiplier: int = 1,
 ):
     # Start progress tracking
     progress.start()
@@ -73,6 +75,8 @@ def run_hedge_fund(
                     "portfolio": portfolio,
                     "start_date": start_date,
                     "end_date": end_date,
+                    "interval": interval,
+                    "interval_multiplier": interval_multiplier,
                     "analyst_signals": {},
                 },
                 "metadata": {
@@ -175,5 +179,7 @@ if __name__ == "__main__":
         selected_analysts=inputs.selected_analysts,
         model_name=inputs.model_name,
         model_provider=inputs.model_provider,
+        interval=inputs.interval,
+        interval_multiplier=inputs.interval_multiplier,
     )
     print_trading_output(result)

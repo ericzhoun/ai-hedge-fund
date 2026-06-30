@@ -8,6 +8,7 @@ class Price(BaseModel):
     low: float
     volume: int
     time: str
+    is_snapshot: bool = False
 
 
 class PriceResponse(BaseModel):

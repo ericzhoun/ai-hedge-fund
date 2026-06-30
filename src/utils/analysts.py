@@ -20,6 +20,9 @@ from src.agents.mohnish_pabrai import mohnish_pabrai_agent
 from src.agents.nassim_taleb import nassim_taleb_agent
 from src.agents.news_sentiment import news_sentiment_agent
 from src.agents.growth_agent import growth_analyst_agent
+from src.agents.day_swing_trader import day_swing_trader_agent
+from src.agents.tv_st_ep03 import tv_st_ep03_agent
+from src.agents.howard_marks import howard_marks_agent
 
 # Define analyst configuration - single source of truth
 ANALYST_CONFIG = {
@@ -174,6 +177,30 @@ ANALYST_CONFIG = {
         "agent_func": valuation_analyst_agent,
         "type": "analyst",
         "order": 18,
+    },
+    "day_swing_trader": {
+        "display_name": "Day & Swing Trader",
+        "description": "Smart Money / Price Action System",
+        "investing_style": "Top-down SMC trader: reads HTF trend, ITF range manipulation, order blocks, FVGs, and Fibonacci discount/premium zones to identify asymmetric swing and day-trade setups with tight invalidation.",
+        "agent_func": day_swing_trader_agent,
+        "type": "analyst",
+        "order": 19,
+    },
+    "tv_st_ep03": {
+        "display_name": "TV-ST-EP03 Analyst",
+        "description": "Smart Trader Episode 3 Analyst",
+        "investing_style": "Block-based price analysis using geometric volume engine and trend channels from Ata Sabancı's TradingView script.",
+        "agent_func": tv_st_ep03_agent,
+        "type": "analyst",
+        "order": 20,
+    },
+    "howard_marks": {
+        "display_name": "Howard Marks",
+        "description": "The Cycle-Aware Value Investor",
+        "investing_style": "Focuses on risk control, market cycle awareness, second-level thinking, and contrarian positioning. Seeks asymmetric returns by buying below intrinsic value during periods of excessive pessimism, inspired by his Oaktree Capital memos.",
+        "agent_func": howard_marks_agent,
+        "type": "analyst",
+        "order": 21,
     },
 }
 

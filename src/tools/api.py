@@ -60,39 +60,94 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         return response
 
 
-def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
-    """Fetch price data from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date}_{end_date}"
-    
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_prices(cache_key):
-        return [Price(**price) for price in cached_data]
+def get_prices(ticker: str, start_date: str, end_date: str, interval: str = "day", interval_multiplier: int = 1, api_key: str = None, include_snapshot: bool = True) -> list[Price]:
+    """Fetch price data from cache or API, optionally appending the latest snapshot.
 
-    # If not in cache, fetch from API
+    When ``include_snapshot`` is True (the default for live analysis), the most
+    recent intraday snapshot is fetched from ``/prices/snapshot/`` and merged
+    into the historical price list.  The snapshot uses proper OHLCV fields and
+    is marked with ``is_snapshot=True`` so downstream agents can distinguish it
+    from historical bars.
+
+    If the snapshot's timestamp matches the last historical bar (same date for
+    daily data), the snapshot *replaces* the historical bar to provide the
+    freshest data.  Otherwise it is appended as a new bar.
+
+    Set ``include_snapshot=False`` during backtesting to avoid contaminating
+    historical data with live prices.
+    """
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
     if financial_api_key:
         headers["X-API-KEY"] = financial_api_key
 
-    url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = _make_api_request(url, headers)
-    if response.status_code != 200:
-        return []
+    prices = []
+    # Cache by ticker and interval format to share data among all analysts
+    cache_key = f"{ticker}_{interval}_{interval_multiplier}"
+    
+    # Always fetch a 5-year superset to satisfy any analyst's range requirements
+    fetch_start = (datetime.datetime.strptime(end_date, "%Y-%m-%d") - datetime.timedelta(days=5*365)).strftime("%Y-%m-%d")
+    
+    cached_data = _cache.get_prices(cache_key)
+    if not cached_data:
+        # If not in cache, fetch the superset from API
+        url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval={interval}&interval_multiplier={interval_multiplier}&start_date={fetch_start}&end_date={end_date}"
+        response = _make_api_request(url, headers)
+        if response.status_code == 200:
+            try:
+                price_response = PriceResponse(**response.json())
+                prices = price_response.prices
+                if prices:
+                    _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+                    cached_data = _cache.get_prices(cache_key)
+            except Exception as e:
+                logger.warning("Failed to parse price response for %s: %s", ticker, e)
+                
+    if cached_data:
+        # Filter the cached superset to exactly what the analyst requested
+        prices = [Price(**price) for price in cached_data if start_date <= price["time"][:10] <= end_date]
 
-    # Parse response with Pydantic model
-    try:
-        price_response = PriceResponse(**response.json())
-        prices = price_response.prices
-    except Exception as e:
-        logger.warning("Failed to parse price response for %s: %s", ticker, e)
-        return []
+    # Optionally fetch the live snapshot and merge it
+    if include_snapshot:
+        # Use an in-memory cache attached to the _cache object for the lifetime of this run
+        if not hasattr(_cache, "snapshot_cache"):
+            _cache.snapshot_cache = {}
+            
+        snapshot_data = _cache.snapshot_cache.get(ticker)
+        
+        if not snapshot_data:
+            snapshot_url = f"https://api.financialdatasets.ai/prices/snapshot/?ticker={ticker}"
+            snapshot_response = _make_api_request(snapshot_url, headers)
+            if snapshot_response.status_code == 200:
+                try:
+                    snapshot_data = snapshot_response.json().get("snapshot", {})
+                    if snapshot_data:
+                        _cache.snapshot_cache[ticker] = snapshot_data
+                except Exception as e:
+                    logger.warning("Failed to parse snapshot response for %s: %s", ticker, e)
+                    
+        if snapshot_data:
+            snapshot_price = Price(
+                open=snapshot_data.get("open", snapshot_data.get("price", 0)),
+                close=snapshot_data.get("close", snapshot_data.get("price", 0)),
+                high=snapshot_data.get("high", snapshot_data.get("price", 0)),
+                low=snapshot_data.get("low", snapshot_data.get("price", 0)),
+                volume=snapshot_data.get("volume", 0),
+                time=snapshot_data.get("time", ""),
+                is_snapshot=True,
+            )
+            # Deduplicate: if the snapshot covers the same period as the
+            # last historical bar, replace it (snapshot is fresher).
+            if prices and snapshot_price.time:
+                last_hist_date = prices[-1].time[:10]  # YYYY-MM-DD
+                snap_date = snapshot_price.time[:10]
+                if last_hist_date == snap_date:
+                    prices[-1] = snapshot_price
+                else:
+                    prices.append(snapshot_price)
+            else:
+                prices.append(snapshot_price)
 
-    if not prices:
-        return []
-
-    # Cache the results using the comprehensive cache key
-    _cache.set_prices(cache_key, [p.model_dump() for p in prices])
     return prices
 
 
@@ -104,38 +159,35 @@ def get_financial_metrics(
     api_key: str = None,
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
+    # Use a broader cache key to group calls (ticker + period)
+    cache_key = f"{ticker}_{period}"
     
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_financial_metrics(cache_key):
-        return [FinancialMetrics(**metric) for metric in cached_data]
+    cached_data = _cache.get_financial_metrics(cache_key)
+    if not cached_data:
+        # If not in cache, fetch a large superset from API
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    # If not in cache, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
+        url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit=20&period={period}"
+        response = _make_api_request(url, headers)
+        if response.status_code == 200:
+            try:
+                metrics_response = FinancialMetricsResponse(**response.json())
+                financial_metrics = metrics_response.financial_metrics
+                if financial_metrics:
+                    _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
+                    cached_data = _cache.get_financial_metrics(cache_key)
+            except Exception as e:
+                logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
 
-    url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = _make_api_request(url, headers)
-    if response.status_code != 200:
-        return []
-
-    # Parse response with Pydantic model
-    try:
-        metrics_response = FinancialMetricsResponse(**response.json())
-        financial_metrics = metrics_response.financial_metrics
-    except Exception as e:
-        logger.warning("Failed to parse financial metrics response for %s: %s", ticker, e)
-        return []
-
-    if not financial_metrics:
-        return []
-
-    # Cache the results as dicts using the comprehensive cache key
-    _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
-    return financial_metrics
+    if cached_data:
+        # Sort by date descending and filter to requested limit
+        sorted_metrics = sorted(cached_data, key=lambda x: x["report_period"], reverse=True)
+        return [FinancialMetrics(**metric) for metric in sorted_metrics[:limit]]
+        
+    return []
 
 
 def search_line_items(
@@ -147,37 +199,54 @@ def search_line_items(
     api_key: str = None,
 ) -> list[LineItem]:
     """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
-    headers = {}
-    financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
-        headers["X-API-KEY"] = financial_api_key
-
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
-
-    body = {
-        "tickers": [ticker],
-        "line_items": line_items,
-        "end_date": end_date,
-        "period": period,
-        "limit": limit,
-    }
-    response = _make_api_request(url, headers, method="POST", json_data=body)
-    if response.status_code != 200:
-        return []
+    # Use a broader cache key (ticker + period)
+    cache_key = f"{ticker}_{period}"
     
-    try:
-        data = response.json()
-        response_model = LineItemResponse(**data)
-        search_results = response_model.search_results
-    except Exception as e:
-        logger.warning("Failed to parse line items response for %s: %s", ticker, e)
-        return []
-    if not search_results:
-        return []
+    cached_data = _cache.get_line_items(cache_key)
+    if not cached_data:
+        headers = {}
+        financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
+        if financial_api_key:
+            headers["X-API-KEY"] = financial_api_key
 
-    # Cache the results
-    return search_results[:limit]
+        url = "https://api.financialdatasets.ai/financials/search/line-items"
+
+        # Fetch a superset of common line items used by all analysts
+        all_line_items = [
+            "capital_expenditure", "cash_and_equivalents", "current_assets", "current_liabilities",
+            "debt_to_equity", "depreciation_and_amortization", "dividends_and_other_cash_distributions",
+            "earnings_per_share", "ebit", "ebitda", "free_cash_flow", "goodwill_and_intangible_assets",
+            "gross_margin", "gross_profit", "interest_expense", "issuance_or_purchase_of_equity_shares",
+            "net_income", "operating_expense", "operating_income", "operating_margin",
+            "outstanding_shares", "research_and_development", "return_on_invested_capital",
+            "revenue", "shareholders_equity", "total_assets", "total_debt", "total_liabilities",
+            "working_capital", "book_value_per_share"
+        ]
+
+        body = {
+            "tickers": [ticker],
+            "line_items": all_line_items,
+            "end_date": end_date,
+            "period": period,
+            "limit": 20,
+        }
+        response = _make_api_request(url, headers, method="POST", json_data=body)
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                response_model = LineItemResponse(**data)
+                search_results = response_model.search_results
+                if search_results:
+                    _cache.set_line_items(cache_key, [m.model_dump() for m in search_results])
+                    cached_data = _cache.get_line_items(cache_key)
+            except Exception as e:
+                logger.warning("Failed to parse line items response for %s: %s", ticker, e)
+
+    if cached_data:
+        sorted_items = sorted(cached_data, key=lambda x: x["report_period"], reverse=True)
+        return [LineItem(**item) for item in sorted_items[:limit]]
+        
+    return []
 
 
 def get_insider_trades(
@@ -349,18 +418,26 @@ def get_market_cap(
 
 
 def prices_to_df(prices: list[Price]) -> pd.DataFrame:
-    """Convert prices to a DataFrame."""
+    """Convert prices to a DataFrame.
+
+    The resulting DataFrame includes an ``is_snapshot`` boolean column so that
+    downstream agents can distinguish the live intraday snapshot bar from
+    historical bars (e.g. to weight it differently in indicator calculations).
+    """
     df = pd.DataFrame([p.model_dump() for p in prices])
-    df["Date"] = pd.to_datetime(df["time"])
+    df["Date"] = pd.to_datetime(df["time"], format="mixed", utc=True).dt.tz_localize(None)
     df.set_index("Date", inplace=True)
     numeric_cols = ["open", "close", "high", "low", "volume"]
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Ensure is_snapshot column exists (older cached data may lack it)
+    if "is_snapshot" not in df.columns:
+        df["is_snapshot"] = False
     df.sort_index(inplace=True)
     return df
 
 
 # Update the get_price_data function to use the new functions
-def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
-    prices = get_prices(ticker, start_date, end_date, api_key=api_key)
+def get_price_data(ticker: str, start_date: str, end_date: str, interval: str = "day", interval_multiplier: int = 1, api_key: str = None, include_snapshot: bool = True) -> pd.DataFrame:
+    prices = get_prices(ticker, start_date, end_date, interval=interval, interval_multiplier=interval_multiplier, api_key=api_key, include_snapshot=include_snapshot)
     return prices_to_df(prices)

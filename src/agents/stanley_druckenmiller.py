@@ -38,6 +38,8 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
     end_date = data["end_date"]
     tickers = data["tickers"]
     api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
+    interval = data.get("interval", "day")
+    interval_multiplier = data.get("interval_multiplier", 1)
     analysis_data = {}
     druck_analysis = {}
 
@@ -85,7 +87,7 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
         company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Fetching recent price data for momentum")
-        prices = get_prices(ticker, start_date=start_date, end_date=end_date, api_key=api_key)
+        prices = get_prices(ticker, start_date=start_date, end_date=end_date, interval=interval, interval_multiplier=interval_multiplier, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Analyzing growth & momentum")
         growth_momentum_analysis = analyze_growth_and_momentum(financial_line_items, prices)
