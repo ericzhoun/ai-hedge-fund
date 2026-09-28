@@ -11,11 +11,11 @@ portfolio = {
 result = run_hedge_fund(
     tickers=["TSLA"],
     start_date="2026-02-01",
-    end_date="2026-05-01",
+    end_date="2026-07-01",
     portfolio=portfolio,
     show_reasoning=False,
-    selected_analysts=["howard_marks"],
-    model_name="claude-3-5-sonnet-20241022",
+    selected_analysts=["day_swing_trader"],
+    model_name="claude-opus-4-8",
     model_provider="Anthropic"
 )
-print(json.dumps(result["analyst_signals"]["howard_marks_agent"], indent=2))
+print(json.dumps(result["analyst_signals"]["day_swing_trader_agent"], indent=2))
