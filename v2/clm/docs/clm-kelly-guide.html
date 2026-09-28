@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLM + Kelly · Integration Guide · AI Hedge Fund v2</title>
+<style>
+  :root{
+    --bg:#F5F6F8; --panel:#FBFCFD; --tint:#EDF0F4;
+    --ink:#1C2531; --muted:#5C6B7E; --faint:#8B97A6;
+    --line:#DCE1E8; --line-strong:#C6CDD7;
+    --accent:#3A5578; --end:#3C516B;
+    --sans:"Avenir Next","Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --serif:"Iowan Old Style",Georgia,serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14.5px;line-height:1.6}
+  .page{max-width:1060px;margin:0 auto;padding:40px 36px 72px}
+
+  header.masthead{padding-bottom:24px;border-bottom:1px solid var(--line-strong)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  h1{font-size:40px;font-weight:600;letter-spacing:-.018em;line-height:1.1;margin:14px 0 10px}
+  .lede{font-size:16px;color:var(--muted);max-width:72ch;margin:0 0 16px}
+  .meta{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .meta .sep{color:var(--faint);padding:0 7px}
+  .tagline{display:inline-block;border:1px solid var(--line-strong);background:var(--panel);font-family:var(--mono);
+           font-size:11px;letter-spacing:.05em;padding:3px 10px;margin-top:14px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--line)}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .sec-index{font-family:var(--mono);font-size:11.5px;color:var(--faint);letter-spacing:.07em}
+  h2{font-size:20px;font-weight:600;letter-spacing:-.008em;margin:0}
+  h3{font-size:14.5px;font-weight:600;margin:22px 0 8px}
+  p{margin:0 0 11px;max-width:78ch}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(58,85,120,.35)}
+  a:hover{border-bottom-color:var(--accent)}
+  code{font-family:var(--mono);font-size:12.4px;background:var(--tint);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+  strong{font-weight:600}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0 8px;background:var(--panel);border:1px solid var(--line)}
+  th,td{text-align:left;vertical-align:top;padding:9px 13px;border-bottom:1px solid var(--line);font-size:13px}
+  th{font-family:var(--mono);font-weight:500;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--tint)}
+  tr:last-child td{border-bottom:none}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.2px;white-space:nowrap}
+  td.num{font-family:var(--mono);font-size:12.2px;text-align:right;white-space:nowrap}
+  .note{color:var(--muted);font-size:12.5px}
+  .foot{font-size:11.5px}
+
+  .eqwrap{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:18px 22px;margin:14px 0}
+  .eq{font-family:var(--serif);font-size:23px;font-style:italic;letter-spacing:.01em}
+  .eq .sub{font-size:13px;font-style:normal;color:var(--muted);font-family:var(--sans);margin-top:6px;display:block}
+  .eq + .eq{margin-top:12px}
+
+  pre{background:var(--tint);border:1px solid var(--line);border-radius:3px;padding:13px 15px;overflow-x:auto;
+      font-family:var(--mono);font-size:12.4px;line-height:1.6;margin:10px 0 12px}
+  pre .c{color:var(--muted)}
+
+  figure{margin:18px 0 6px;padding:16px 16px 10px;background:var(--panel);border:1px solid var(--line)}
+  figure img{display:block;width:100%;height:auto}
+  figcaption{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+
+  ul.notes{margin:8px 0 8px;padding-left:18px;max-width:80ch}
+  ul.notes li{margin-bottom:7px}
+  ol.steps{margin:10px 0;padding-left:20px;max-width:80ch}
+  ol.steps li{margin-bottom:6px}
+
+  footer{margin-top:52px;padding-top:16px;border-top:1px solid var(--line-strong);
+         display:flex;justify-content:space-between;gap:20px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  @media (max-width:900px){ h1{font-size:30px} .page{padding:26px 18px 52px} }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <div class="kicker">AI Hedge Fund · v2 · Integration Note</div>
+  <h1>CLM-8B signals, Kelly-sized</h1>
+  <p class="lede">The local <strong>CLM-8B</strong> System One model now scores every name in the pipeline, and a new
+  <strong>Kelly blend</strong> sizes positions from those probabilities with a <strong>20% safety buffer</strong>.
+  Both ride existing interfaces — <code>AlphaModel</code> and <code>BlendPolicy</code> — so nothing downstream changes.</p>
+  <div class="meta">2026-09-28<span class="sep">·</span>branch <code>experiment</code><span class="sep">·</span>tests: 200 passing (3 pre-existing live-API failures)</div>
+  <div class="tagline">educational use only · not investment advice</div>
+</header>
+
+<section id="shipped">
+  <div class="sec-head"><span class="sec-index">01</span><h2>What shipped</h2></div>
+  <table>
+    <thead><tr><th>Path</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">v2/clm/client.py</td><td>HTTP client for a local <code>clm-serve</code> (<code>POST /v1/systemone</code>); raises <code>CLMError</code> on any failure.</td></tr>
+      <tr><td class="mono">v2/clm/cache.py</td><td>One JSON per scoring decision (<code>.v2_cache/clm/</code>) — cache, replay record, and debug trail in one.</td></tr>
+      <tr><td class="mono">v2/signals/clm.py</td><td><code>CLMAnalyst</code>: point-in-time snapshot → appreciate/flat/depreciate probabilities → <code>Signal</code>.</td></tr>
+      <tr><td class="mono">v2/portfolio/kelly.py</td><td><code>kelly_fraction</code> (f* = p − (1−p)/b) + <code>blend_kelly</code> (probabilities → buffered weights).</td></tr>
+      <tr><td class="mono">v2/fund/spec.py</td><td><code>BlendPolicy</code> gains <code>method: kelly</code>, <code>payoff_ratio</code>, <code>buffer</code> (default 0.2); scoped validation.</td></tr>
+      <tr><td class="mono">v2/pipeline/run_cycle.py</td><td>Dispatches on the blend method — one pipeline, two sizing policies.</td></tr>
+      <tr><td class="mono">v2/signals/__init__.py</td><td><code>clm</code> registered in <code>ALPHA_MODEL_REGISTRY</code>.</td></tr>
+      <tr><td class="mono">v2/funds/clm-kelly.yaml · clm-conviction.yaml</td><td>Demo mandates: same CLM signals, both sizing policies.</td></tr>
+      <tr><td class="mono">v2/strategies/clm-kelly.yaml</td><td>Strategy-library entry for the fund builder.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="signal">
+  <div class="sec-head"><span class="sec-index">02</span><h2>The signal — CLM as an alpha model</h2></div>
+  <p>CLM scores candidate actions against a state instead of generating text. The state is the shared
+  point-in-time fundamentals snapshot; the candidate set is a closed, typed question about the next quarter:</p>
+  <figure>
+    <img src="assets/clm-kelly-flow.png" alt="CLM + Kelly pipeline: snapshot → CLM scoring → Signal → Kelly sizing → risk clamps → orders → CycleRecord">
+    <figcaption>Signal → sizing → risk → execution: the new stages (CLM scoring, Kelly sizing) slot into the existing v2 pipeline.</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>The snapshot renders the state (only data filed by the as-of date — no lookahead).</li>
+    <li><code>clm-serve</code> returns <code>appreciate / flat / depreciate</code> probabilities.</li>
+    <li><code>CLMAnalyst</code> emits <code>value = p↑ − p↓ ∈ [−1, 1]</code> with the full distribution in <code>metadata.probabilities</code>.</li>
+    <li>The Kelly blend consumes those probabilities for sizing (other models can too).</li>
+  </ol>
+  <p class="note">Failure contract mirrors the LLM agents: data errors propagate; CLM call/parse failures abstain
+  (<code>metadata.abstained</code>); an unchanged snapshot never pays a second call. Probabilities are relative to the option set.</p>
+</section>
+
+<section id="sizing">
+  <div class="sec-head"><span class="sec-index">03</span><h2>The sizing — Kelly with a 20% buffer</h2></div>
+  <div class="eqwrap">
+    <div class="eq">f* = p − (1 − p) / b
+      <span class="sub">p = win probability, b = payoff ratio (win per unit risked). f* ≤ 0 means no position — Kelly refuses coin-flips.</span>
+    </div>
+    <div class="eq">deploy = (1 − buffer) × min(Σ f*, gross_target)
+      <span class="sub">Kelly fractions set the proportions; the buffer reserves a fraction of the budget. Default buffer 0.2 → full Kelly never deploys more than 80% of the book.</span>
+    </div>
+  </div>
+  <p>For a directional bet the outcome space is three-way (up / flat / down). A flat outcome is a <em>push</em> — it
+  contributes log(1) = 0 to expected log wealth, so it drops out of the maximization and p is taken
+  <strong>conditional on the quarter resolving</strong>: <code>p = p↑ / (p↑ + p↓)</code>. With b = 1 this reads
+  <code>f* = (p↑ − p↓) / (p↑ + p↓)</code>.</p>
+  <p>The buffer is a budget <strong>reserve</strong>, not a haircut that scaling can cancel: under the cap the stake is
+  exactly <code>f* × (1 − buffer)</code> per name; when Kelly wants the whole cap, proportions are held on the buffered
+  budget <code>gross_target × (1 − buffer)</code>. Either way the remainder sits in cash, and the fund's risk limits
+  remain the master gate afterwards (<code>max_position_pct</code>, <code>max_gross_exposure</code>).</p>
+  <p class="note">Signals without probabilities fall back to <code>p = (1 + |conviction|) / 2</code>, so any model in the
+  registry can feed the blend. Abstained signals are excluded from both blending and sizing.</p>
+</section>
+
+<section id="run">
+  <div class="sec-head"><span class="sec-index">04</span><h2>Live run — same signals, two sizings</h2></div>
+  <p>One cycle on <strong>2025-06-03</strong>, five megacaps, $100k, both mandates run against the real CLM service
+  (every name resolved bearish — a short book):</p>
+  <table>
+    <thead><tr><th>Ticker</th><th class="num">p↑</th><th class="num">p flat</th><th class="num">p↓</th><th class="num">p (cond.)</th><th class="num">f*</th><th class="num">Kelly weight</th><th class="num">Conviction weight</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">AAPL</td><td class="num">0.14</td><td class="num">0.52</td><td class="num">0.35</td><td class="num">0.717</td><td class="num">0.433</td><td class="num">−0.132</td><td class="num">−0.206</td></tr>
+      <tr><td class="mono">MSFT</td><td class="num">0.06</td><td class="num">0.78</td><td class="num">0.16</td><td class="num">0.717</td><td class="num">0.435</td><td class="num">−0.133</td><td class="num">−0.093</td></tr>
+      <tr><td class="mono">NVDA</td><td class="num">0.10</td><td class="num">0.31</td><td class="num">0.59</td><td class="num">0.858</td><td class="num">0.716</td><td class="num">−0.219</td><td class="num">−0.250 *</td></tr>
+      <tr><td class="mono">GOOGL</td><td class="num">0.05</td><td class="num">0.78</td><td class="num">0.17</td><td class="num">0.760</td><td class="num">0.519</td><td class="num">−0.159</td><td class="num">−0.114</td></tr>
+      <tr><td class="mono">AMZN</td><td class="num">0.05</td><td class="num">0.79</td><td class="num">0.16</td><td class="num">0.757</td><td class="num">0.515</td><td class="num">−0.157</td><td class="num">−0.106</td></tr>
+    </tbody>
+  </table>
+  <p class="note">* clamped by <code>max_position_pct</code>: conviction-weighting requested −0.483 and risk cut it to −0.250.</p>
+  <ul class="notes">
+    <li><strong>Kelly deploys exactly 0.80 gross</strong> — the buffered budget (Σ f* = 2.62 would have wanted the full cap; the buffer reserved 20%). No name tripped a risk clamp.</li>
+    <li><strong>Conviction-weighting asked for 1.00 gross</strong>, got clamped to 0.77 — NVDA alone was cut from 48% to 25% of equity. Same signals, a very different risk posture.</li>
+    <li><strong>The sizings re-rank names.</strong> Kelly sizes by measured edge: MSFT (−0.133) outweighs AAPL (−0.132) despite AAPL's larger raw conviction; conviction-weighting does the opposite (−0.093 vs −0.206).</li>
+    <li>Orders execute the difference: e.g. NVDA 154 shares short under Kelly vs 177 under conviction (both after their respective sizings).</li>
+  </ul>
+</section>
+
+<section id="repro">
+  <div class="sec-head"><span class="sec-index">05</span><h2>Run it</h2></div>
+  <pre><span class="c"># 1. start the local CLM-8B service (embeddings :8092, clm-serve :8700)</span>
+~/clm/scripts/start-clm.sh
+
+<span class="c"># 2. Kelly-sized mandate (buffer 0.2)</span>
+poetry run python -m v2.run v2/funds/clm-kelly.yaml --date 2025-06-03
+
+<span class="c"># 3. same signals, default conviction sizing — compare the books</span>
+poetry run python -m v2.run v2/funds/clm-conviction.yaml --date 2025-06-03
+
+<span class="c"># 4. tests for this integration</span>
+poetry run pytest v2/clm v2/signals/test_clm_analyst.py v2/portfolio/test_kelly.py \
+    v2/pipeline/test_run_cycle_kelly.py v2/fund/test_blend_policy.py -q</pre>
+  <p>Knobs in the strategy YAML: <code>method: kelly</code> · <code>payoff_ratio</code> (b, default 1.0) ·
+  <code>buffer</code> (default 0.2) · <code>gross_target</code> (cap on deployment). Env: <code>CLM_BASE_URL</code>,
+  <code>CLM_MODEL</code>. The service runs outside this repo — see <code>v2/clm/README.md</code>.</p>
+</section>
+
+<section id="notes">
+  <div class="sec-head"><span class="sec-index">06</span><h2>Notes</h2></div>
+  <ul class="notes">
+    <li><strong>Buffer semantics (deliberate):</strong> reserve, not haircut — it cannot be cancelled by gross-cap scaling, so the safety margin is visible in every regime.</li>
+    <li><strong>Kelly is not a target</strong>: it sizes to the measured edge; with modest edges a Kelly book is simply smaller than a conviction book. Zero-edge names sit in cash instead of taking a position.</li>
+    <li><strong>CLM is a ranker</strong>: it only scores the candidates given; its probabilities are relative to that set, and accuracy depends on the state you feed it.</li>
+    <li><strong>Reproducibility:</strong> scoring decisions cache to <code>.v2_cache/clm/</code>; a rerun over unchanged snapshots is free and byte-identical.</li>
+    <li>Upstream CLM: <a href="https://huggingface.co/Contrastive-LM/CLM-v0.1-8B">model card</a> · <a href="https://github.com/Contrastive-LM/CLM">code</a>.</li>
+  </ul>
+</section>
+
+<footer>
+  <span>ai-hedge-fund v2 · CLM + Kelly integration · generated 2026-09-28</span>
+  <span>v2/clm/docs/clm-kelly-guide.html</span>
+</footer>
+
+</div>
+</body>
+</html>

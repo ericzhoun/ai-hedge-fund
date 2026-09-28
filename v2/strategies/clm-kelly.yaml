@@ -1,0 +1,16 @@
+# CLM Kelly — systematic pod: the local CLM-8B System One model scores each
+# name's point-in-time fundamentals (appreciate / flat / depreciate), and the
+# sleeve is sized with fractional Kelly off those probabilities:
+# f* = p - (1-p)/b sets the proportions, and the buffer reserves 20% of the
+# budget — full Kelly never deploys more than 80% of the book, the rest
+# stays in cash. No edge (f* <= 0) means no position; risk limits remain
+# the master gate. Requires the local clm-serve (see v2/clm/README.md).
+name: clm-kelly
+display_name: CLM Kelly
+models:
+  - name: clm
+blend:
+  method: kelly
+  payoff_ratio: 1.0
+  buffer: 0.2
+  gross_target: 1.0

@@ -8,8 +8,8 @@ PaperBroker; live is the same loop with a real broker. Only the clock and the
 broker change — the pipeline never does.
 
 run_cycle is the pipeline's only impure piece: it talks to the data client
-and the broker. Every stage it delegates to (blend_signals, apply_limits,
-build_orders) is a pure function. Determinism: given the same spec, date,
+and the broker. Every stage it delegates to (blend_signals / blend_kelly,
+apply_limits, build_orders) is a pure function. Determinism: given the same spec, date,
 broker state, and data responses, the returned record is byte-identical —
 with the one caveat that a cold LLM cache makes an agent's first live call
 nondeterministic; the prompt cache makes every replay exact.
@@ -39,6 +39,7 @@ from v2.models import Signal
 from v2.pipeline.execution import build_orders
 from v2.pipeline.models import CycleRecord, StrategyRecord, TickerSkip
 from v2.portfolio.construction import blend_signals
+from v2.portfolio.kelly import blend_kelly
 from v2.risk.limits import apply_limits
 
 # How far back to look for the most recent close: covers weekends, holiday
@@ -83,10 +84,19 @@ def run_cycle(
         for ticker in tradeable:
             for model in staff:
                 signals.append(model.predict(ticker, as_of, data_client))
-        blend = blend_signals(
-            signals, strategy.model_weights, strategy.blend.gross_target,
-            market_neutral=strategy.blend.market_neutral,
-        )
+        if strategy.blend.method == "kelly":
+            blend = blend_kelly(
+                signals,
+                strategy.model_weights,
+                payoff_ratio=strategy.blend.payoff_ratio,
+                buffer=strategy.blend.buffer,
+                gross_cap=strategy.blend.gross_target,
+            )
+        else:
+            blend = blend_signals(
+                signals, strategy.model_weights, strategy.blend.gross_target,
+                market_neutral=strategy.blend.market_neutral,
+            )
         slice_ = strategy.weight / total_slice
         for ticker, weight in blend.weights.items():
             netted[ticker] += slice_ * weight

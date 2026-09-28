@@ -1,0 +1,27 @@
+# CLM + Kelly — System One signals, Kelly sizing with a 20% buffer.
+# The local CLM-8B service scores each ticker's point-in-time fundamentals;
+# the kelly blend sizes every name from its up/flat/down probabilities:
+# f* = p - (1-p)/b sets the proportions, and the buffer reserves 20% of the
+# budget — full Kelly never deploys more than 80% of the book.
+#
+# Requires the CLM-8B server: ~/clm/scripts/start-clm.sh (API on :8700).
+# Run one cycle with:
+#
+#   poetry run python -m v2.run v2/funds/clm-kelly.yaml --date 2025-06-03
+#
+name: clm-kelly-demo
+universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]
+strategies:
+  - name: clm-kelly
+    display_name: CLM Kelly
+    models:
+      - name: clm
+    blend:
+      method: kelly
+      payoff_ratio: 1.0
+      buffer: 0.2          # 20% of full Kelly discarded — the safety margin
+      gross_target: 1.0    # scale-down-only cap on gross exposure
+risk:
+  max_position_pct: 0.25
+  max_gross_exposure: 1.0
+capital: 100000

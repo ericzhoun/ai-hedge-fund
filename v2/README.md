@@ -39,6 +39,11 @@ poetry run python -m v2.run
 # netting → risk → execution), full CycleRecord as JSON on stdout.
 poetry run python -m v2.run v2/funds/example.yaml --date 2025-06-03
 
+# CLM + Kelly demo — needs the local CLM service on :8700
+# (~/clm/scripts/start-clm.sh). CLM-8B scores each name's point-in-time
+# fundamentals; the kelly blend sizes with a 20% buffer.
+poetry run python -m v2.run v2/funds/clm-kelly.yaml --date 2025-06-03
+
 # Backtest demo — PEAD across 25 stocks, live terminal dashboard (~20s)
 poetry run python -m v2.demo.backtest
 
@@ -58,12 +63,13 @@ Data (point-in-time) → Alpha models → Portfolio → Risk → Execution → L
 | Module | What | Status |
 |--------|------|--------|
 | `data/` | `DataClient` protocol, Financial Datasets client, disk cache | ✅ |
-| `signals/` | `AlphaModel` interface, PEAD, `LLMAgent` + 5 investor personas | ✅ |
+| `signals/` | `AlphaModel` interface, PEAD, CLM analyst, `LLMAgent` + 5 investor personas | ✅ |
+| `clm/` | CLM-8B System One scoring client (local `clm-serve`) + scoring cache | ✅ |
 | `llm/` | LLM provider protocol, Anthropic client, prompt cache | ✅ |
 | `features/` | Point-in-time fundamentals snapshot (more features planned) | ◐ |
 | `fund/` | `FundSpec`/`StrategySpec` — mandates as YAML data — and the `Fund` object | ✅ |
 | `strategies/` | Strategy library (fundamental-ls, deep-value, inflections, earnings-drift) — add yours as a YAML | ✅ |
-| `portfolio/` | View blending → target weights (conviction-weighted, optional market-neutral) | ✅ |
+| `portfolio/` | View blending → target weights (conviction-weighted; fractional Kelly with buffer; optional market-neutral) | ✅ |
 | `risk/` | Hard limits — per-position and gross-exposure clamps | ✅ |
 | `brokers/` | `Broker` protocol + `SimBroker` (paper/live brokers planned) | ◐ |
 | `pipeline/` | `run_cycle` — one code path for backtest/paper/live; `CycleRecord` | ✅ |

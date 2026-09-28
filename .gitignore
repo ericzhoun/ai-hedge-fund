@@ -43,6 +43,8 @@ Thumbs.db
 
 # graph
 *.png
+# …except the CLM integration docs (checked in)
+!v2/clm/docs/assets/*.png
 
 # Txt files
 *.txt
@@ -70,8 +72,10 @@ app/backend/alembic/versions/__pycache__/
 .v2_cache/
 
 
-# User-created fund mandates (the wizard writes here); keep only the example
+# User-created fund mandates (the wizard writes here); keep only the examples
 v2/funds/*.yaml
 !v2/funds/example.yaml
+!v2/funds/clm-kelly.yaml
+!v2/funds/clm-conviction.yaml
 /.understand-anything
 /src/.understand-anything

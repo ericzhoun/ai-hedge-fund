@@ -1,0 +1,22 @@
+# Comparison companion to clm-kelly.yaml: the SAME CLM analyst under the
+# default conviction_weighted blend. Run both mandates on the same date to
+# see what probability-based (Kelly) sizing changes versus conviction-
+# proportional sizing — same signals, different book:
+#
+#   poetry run python -m v2.run v2/funds/clm-kelly.yaml --date 2025-06-03
+#   poetry run python -m v2.run v2/funds/clm-conviction.yaml --date 2025-06-03
+#
+name: clm-conviction-demo
+universe: [AAPL, MSFT, NVDA, GOOGL, AMZN]
+strategies:
+  - name: clm-conviction
+    display_name: CLM Conviction
+    models:
+      - name: clm
+    blend:
+      method: conviction_weighted
+      gross_target: 1.0
+risk:
+  max_position_pct: 0.25
+  max_gross_exposure: 1.0
+capital: 100000

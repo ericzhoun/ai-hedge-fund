@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from v2.signals.base import AlphaModel, QuantModel
 from v2.signals.buffett import BuffettAgent
+from v2.signals.clm import CLMAnalyst
 from v2.signals.druckenmiller import DruckenmillerAgent
 from v2.signals.graham import GrahamAgent
 from v2.signals.llm_agent import LLMAgent
@@ -20,6 +21,8 @@ from v2.signals.pead import PEADModel
 ALPHA_MODEL_REGISTRY: dict[str, type[AlphaModel]] = {
     # Quant models
     "pead": PEADModel,
+    # System One model — local CLM-8B scoring service (see v2/clm/)
+    "clm": CLMAnalyst,
     # LLM investor agents
     "buffett": BuffettAgent,
     "munger": MungerAgent,
@@ -32,6 +35,7 @@ __all__ = [
     "AlphaModel",
     "QuantModel",
     "LLMAgent",
+    "CLMAnalyst",
     "BuffettAgent",
     "MungerAgent",
     "GrahamAgent",

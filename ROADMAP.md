@@ -40,6 +40,7 @@ the engine. Two flavors:
 | Model | Status |
 |-------|--------|
 | Post-Earnings Announcement Drift (PEAD) | ✅ |
+| CLM System One — local CLM-8B scorer (up/flat/down probabilities → Signal) | ✅ |
 | Market-regime detection (HMM / regime-switching) | ⬜ |
 | Momentum | ⬜ |
 | Mean reversion | ⬜ |
@@ -64,7 +65,7 @@ can be backtested and combined — is a great first contribution:
 | Item | Status |
 |------|--------|
 | Strategy — bundle models + a blend policy + capital slice (a "pod") | ✅ (`StrategySpec` + library: fundamental-ls, deep-value, inflections, earnings-drift) |
-| Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; optional market-neutral sleeves) |
+| Portfolio construction — blend model views → target weights | ✅ (conviction-weighted; fractional Kelly with a configurable buffer; optional market-neutral sleeves) |
 | Multi-strategy fund — many pods running at once, netted into one book | ⬜ |
 | Allocator (CIO) — pluggable capital allocation across strategies | ⬜ |
 | ↳ Static (human-set dial) | ⬜ |

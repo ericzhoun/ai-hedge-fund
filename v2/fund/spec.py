@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from v2.risk.limits import RiskLimits
 from v2.signals import ALPHA_MODEL_REGISTRY
@@ -49,20 +49,69 @@ class ModelSpec(BaseModel):
 
 
 class BlendPolicy(BaseModel):
-    """How a strategy's model views combine into one sleeve."""
+    """How a strategy's model views combine into one sleeve.
+
+    Two methods, one contract — both pure functions over Signals:
+
+    - `conviction_weighted` (default): weight_t = conviction_t /
+      sum(|convictions|) x gross_target — capital flows proportionally to
+      blended conviction.
+    - `kelly`: sized from the win probability each Signal carries
+      (v2/portfolio/kelly.py). Kelly fractions set the proportions; the
+      buffer reserves a fraction of the budget, so the book deploys at
+      most (1 - buffer) x min(sum(f*), gross_target) — the default 20%
+      buffer is real unused headroom, not a rounding artifact.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    method: Literal["conviction_weighted"] = "conviction_weighted"
+    method: Literal["conviction_weighted", "kelly"] = "conviction_weighted"
     gross_target: float = Field(
-        default=1.0, gt=0, description="desired sum of |weights| when views exist"
+        default=1.0, gt=0,
+        description="conviction_weighted: target gross when views exist; "
+        "kelly: cap on what full Kelly may deploy (the buffer reserves a "
+        "fraction of it)",
     )
     market_neutral: bool = Field(
         default=False,
         description="demean convictions cross-sectionally before scaling: long "
         "the best-liked names relative to the rest, short the least-liked — a "
-        "dollar-neutral sleeve",
+        "dollar-neutral sleeve. conviction_weighted only.",
     )
+    payoff_ratio: float = Field(
+        default=1.0, gt=0,
+        description="kelly only: payoff ratio b — win per unit risked",
+    )
+    buffer: float = Field(
+        default=0.2, ge=0.0, lt=1.0,
+        description="kelly only: budget fraction reserved as a safety margin "
+        "— the book deploys at most (1 - buffer) of full Kelly, default 20%",
+    )
+
+    @model_validator(mode="after")
+    def _kelly_fields_scope(self) -> "BlendPolicy":
+        # Value comparison, not model_fields_set: spec dumps carry every
+        # default field, and both the interactive builder and CycleRecord
+        # round-trips re-validate them. Defaults must pass; a *changed*
+        # value under the wrong method is a config mistake worth failing.
+        if self.method == "kelly":
+            if self.market_neutral:
+                raise ValueError(
+                    "market_neutral does not apply to kelly sizing — Kelly "
+                    "sizes from per-name probabilities, not cross-sectional ranking"
+                )
+        else:
+            stray = []
+            if self.payoff_ratio != 1.0:
+                stray.append("payoff_ratio")
+            if self.buffer != 0.2:
+                stray.append("buffer")
+            if stray:
+                raise ValueError(
+                    f"{stray} only apply to method 'kelly' — "
+                    "remove them or switch the method"
+                )
+        return self
 
 
 class StrategySpec(BaseModel):

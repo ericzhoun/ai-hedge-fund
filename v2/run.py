@@ -65,6 +65,7 @@ DISPLAY_NAMES = {
     "graham": "Benjamin Graham",
     "lynch": "Peter Lynch",
     "druckenmiller": "Stanley Druckenmiller",
+    "clm": "CLM System One",
     "pead": "post-earnings drift",
 }
 
@@ -480,6 +481,7 @@ _SHORT_NAMES = {
     "graham": "Graham",
     "lynch": "Lynch",
     "druckenmiller": "Druckenmiller",
+    "clm": "CLM",
     "pead": "PEAD",
 }
 
